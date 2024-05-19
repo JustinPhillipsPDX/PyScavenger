@@ -12,11 +12,11 @@ You'll need to install two Python packages before running the code:
 1. Requests: A package that allows you to send HTTP requests in Python.
    
    ```
-   python -m pip install "requests"
+   python -m pip install requests==2.31.0
    ```
 3. BeautifulSoup: A library for parsing HTML and XML documents.
    
    ```
-   python -m pip install "beautifulsoup4"
+   python -m pip install beautifulsoup4==4.12.3
    ```
 Once you've installed both packages, you should be able to run the Python script without issues.
