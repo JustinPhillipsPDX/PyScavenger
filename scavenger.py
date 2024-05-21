@@ -14,8 +14,20 @@ PyScavenger is an open-source web crawler written in Python.
 """
 # Import necessary libraries
 import requests
+import concurrent.futures
+import json
 from bs4 import BeautifulSoup
 from colorama import Fore, Style
+
+
+class Scavenger:
+    def __init__(self):
+        pass
+
+    def run_scavenger(self):
+        # Create an instance of the Scavenger class and run the web scraping process
+        soup = scavenge_all()
+        print(soup.prettify())
 
 
 def input_url():
@@ -70,23 +82,25 @@ def scavenge_all():
     soup = scavenge(url=url)
     # Get all URLs from the initial page and its subpages
     urls = scavenge_urls(soup, url=url)
-    for url in urls:
-        print(Fore.RED + f'Visiting {url}' + Style.RESET_ALL)
-        # Scrape each URL and process it (e.g., extract data, save to file, etc.)
-        new_soup = scavenge(url=url)
-        # Process the new page here
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Submit each URL request to the thread pool for execution
+        future_to_url = {executor.submit(scavenge, url): url for url in urls}
+        for future in concurrent.futures.as_completed(future_to_url):
+            url = future_to_url[future]
+            print(Fore.RED + f'Visiting {url}' + Style.RESET_ALL)
+            try:
+                new_soup = future.result()
+                # Process the new page here
+            except Exception as exc:
+                print(f'Error while scraping {url}: {exc}')
     return soup
 
 
-class Scavenger:
-    def __init__(self):
-        pass
-
-    def run_scavenger(self):
-        # Create an instance of the Scavenger class and run the web scraping process
-        soup = scavenge_all()
-        print(soup.prettify())
+def main():
+    # Call the run_scavenger method of the Scavenger class
+    py_scavenger = Scavenger()
+    py_scavenger.run_scavenger()
 
 
-py_scavenger = Scavenger()
-py_scavenger.run_scavenger()
+if __name__ == '__main__':
+    main()
