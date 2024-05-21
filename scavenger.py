@@ -12,12 +12,12 @@ Description:
 PyScavenger is an open-source web crawler written in Python.
 ==================================================================
 """
+import concurrent.futures
+import random
+import time
+
 # Import necessary libraries
 import requests
-import time
-import random
-import concurrent.futures
-import json
 from bs4 import BeautifulSoup
 from colorama import Fore, Style
 
@@ -28,98 +28,120 @@ class Scavenger:
 
     def run_scavenger(self):
         # Create an instance of the Scavenger class and run the web scraping process
-        soup = scavenge_all()
-        print(soup.prettify())
+        soup = self.scavenge_all()
 
+    def input_url(self, url):
+        # Prompt user to enter seed URL and validate it
+        url = input(Fore.YELLOW + 'Enter Seed URL: ' + Style.RESET_ALL)
 
-def input_url():
-    # Prompt user to enter seed URL and validate it
-    url = input(Fore.YELLOW + 'Enter Seed URL: ' + Style.RESET_ALL)
+        if not url.startswith('https://'):
+            url = f'https://{url}'
 
-    if not url.startswith('https://'):
-        url = f'https://{url}'
+        return url
 
-    return url
+    def extract_table_data(self, soup, url):
 
+        # Find all table elements without specifying class or ID attribute
+        table_elements = soup.find_all('table')
+        table_data = []
 
-def scavenge_urls(soup, url):
-    # Initialize an empty list to store the URLs
-    urls = []
+        for table_element in table_elements:
+            # Extract the table rows as a list of lists
+            table_rows = []
 
-    # Iterate over all anchor tags in the HTML content
-    for link in soup.find_all('a'):
-        href = link.get('href')
+            for row in table_element.find_all('tr'):
+                row_data = [cell.text.strip() for cell in row.find_all(['th', 'td'])]
+                table_rows.append(row_data)
 
-        # Check if the URL is a relative URL and not already visited
-        if href.startswith('/') and href not in urls:
-            # Combine base URL with relative URL
-            combined_url = url + href
+            # Print the extracted data from each table
+            print(Fore.LIGHTYELLOW_EX + f'Table data for {url}:\n{table_rows}' + Style.RESET_ALL)
 
-            # Add the new URL to the list of URLs if it hasn't been visited before
-            if combined_url not in urls:
-                urls.append(combined_url)
+            # Store the extracted data from each table
+            table_data.extend(table_rows)
 
-        # Check if the URL is an absolute URL and not already visited
-        if href.startswith('http') and href not in urls:
-            # Check if the URL points to a different page or resource
-            if href.startswith('#'):  # Ignore fragment identifiers
+        return {'url': url, 'table_data': table_data, 'soup': soup}
 
-                continue
+    def scavenge(self, url):
+        # Initialize BeautifulSoup object with HTML content and parser
+        page = None
 
-            # Add the new URL to the list of URLs if it hasn't been visited before
-            urls.append(href)
+        try:
+            # Send an HTTP request to the provided URL
+            page = requests.get(url)
 
-    return urls
+        except requests.exceptions.RequestException as e:
+            print(Fore.RED + f'Request failed for URL "{url}": {e}' + Style.RESET_ALL)
+            return None
 
+        if page is not None:
+            soup = BeautifulSoup(page.content, 'html.parser')
+            return self.extract_table_data(soup, url)
 
-def scavenge(url):
-    # Initialize BeautifulSoup object with HTML content and parser
-    page = None
+    def scavenge_all(self):
+        # Prompt user to enter a seed URL
+        url = self.input_url(self)
 
-    try:
-        # Send an HTTP request to the provided URL
-        page = requests.get(url)
+        # Scrape the initial page
+        soup = self.scavenge(url=url)
 
-    except requests.exceptions.RequestException as e:
-        print(f'Request failed for URL "{url}": {e}')
-        return None
+        # print(soup['soup'])
 
-    if page is not None:
-        soup = BeautifulSoup(page.content, 'html.parser')
+        # Get all URLs from the initial page and its subpages
+        urls = self.scavenge_urls(soup['soup'], url=url)
+
+        # Parallel URL requests, add the ability to scrape multiple URLs
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Submit each URL request to the thread pool for execution
+            future_to_url = {executor.submit(self.scavenge, url): url for url in urls}
+
+            for future in concurrent.futures.as_completed(future_to_url):
+                url = future_to_url[future]
+
+                print(Fore.RED + f'Visiting... {url}' + Style.RESET_ALL)
+
+                # Rate Limiting, add a random delay between 0.5 and 2 seconds before making the request
+                time.sleep(random.uniform(0.5, 2))
+
+                # Scrape each URL and process it (e.g., extract data, save to file, etc.)
+                try:
+                    new_soup = future.result()
+
+                    # Process the new page here
+                    self.extract_table_data(new_soup['soup'], url)
+
+                except Exception as exc:
+                    print(Fore.RED + f'Error while scraping {url}: {exc}' + Style.RESET_ALL)
+
         return soup
 
+    def scavenge_urls(self, soup, url):
+        # Initialize an empty list to store the URLs
+        urls = []
 
-def scavenge_all():
-    # Prompt user to enter a seed URL
-    url = input_url()
+        # Iterate over all anchor tags in the HTML content
+        for link in soup.find_all('a'):
+            href = link.get('href')
 
-    # Scrape the initial page
-    soup = scavenge(url=url)
+            # Check if the URL is a relative URL and not already visited
+            if href.startswith('/') and href not in urls:
+                # Combine base URL with relative URL
+                combined_url = url + href
 
-    # Get all URLs from the initial page and its subpages
-    urls = scavenge_urls(soup, url=url)
+                # Add the new URL to the list of URLs if it hasn't been visited before
+                if combined_url not in urls:
+                    urls.append(combined_url)
 
-    # Parallel URL requests, add the ability to scrape multiple URLs
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Submit each URL request to the thread pool for execution
-        future_to_url = {executor.submit(scavenge, url): url for url in urls}
+            # Check if the URL is an absolute URL and not already visited
+            if href.startswith('http') and href not in urls:
+                # Check if the URL points to a different page or resource
+                if href.startswith('#'):  # Ignore fragment identifiers
 
-        for future in concurrent.futures.as_completed(future_to_url):
-            url = future_to_url[future]
-            print(Fore.RED + f'Visiting {url}' + Style.RESET_ALL)
+                    continue
 
-            # Rate Limiting, add a random delay between 0.5 and 2 seconds before making the request
-            time.sleep(random.uniform(0.5, 2))
+                # Add the new URL to the list of URLs if it hasn't been visited before
+                urls.append(href)
 
-            # Scrape each URL and process it (e.g., extract data, save to file, etc.)
-            try:
-                new_soup = future.result()
-                # Process the new page here
-
-            except Exception as exc:
-                print(f'Error while scraping {url}: {exc}')
-
-    return soup
+        return urls
 
 
 def main():
