@@ -12,15 +12,20 @@ Description:
 PyScavenger is an open-source web crawler written in Python.
 ==================================================================
 """
+import os
 import concurrent.futures
 import random
 import time
 
 # Import necessary libraries
-import requests
-from bs4 import BeautifulSoup
-from colorama import Fore, Style
-
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    from colorama import Fore, Style    
+except ModuleNotFoundError:
+    os.system("pip install requests==2.31.0")
+    os.system("pip install beautifulsoup4==4.12.3")
+    os.system("pip install colorama~=0.4.6")
 
 class Scavenger:
     def __init__(self):
